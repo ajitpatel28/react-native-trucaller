@@ -95,7 +95,7 @@ dependencies {
   //noinspection GradleDynamicVersion
   implementation "com.facebook.react:react-native:+"
   implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-  implementation "com.truecaller.android.sdk:truecaller-sdk:3.1.0"
+  implementation "com.truecaller.android.sdk:truecaller-sdk:3.2.1"
 
 }
 

@@ -11,25 +11,35 @@ export default function App() {
     androidClientId: 'xxxxxxxx-android-client-id',
     androidButtonColor: '#212121',
     androidButtonTextColor: '#FFFFFF',
-    androidButtonStyle: TRUECALLER_ANDROID_CUSTOMIZATIONS.BUTTON_SHAPES.ROUNDED,
+    androidButtonShape: TRUECALLER_ANDROID_CUSTOMIZATIONS.BUTTON_SHAPES.ROUNDED,
     androidButtonText: TRUECALLER_ANDROID_CUSTOMIZATIONS.BUTTON_TEXTS.ACCEPT,
     androidFooterButtonText:
       TRUECALLER_ANDROID_CUSTOMIZATIONS.FOOTER_TEXTS.ANOTHER_METHOD,
     androidConsentHeading:
       TRUECALLER_ANDROID_CUSTOMIZATIONS.CONSENT_HEADINGS.CHECKOUT_WITH,
   };
-  const { initiateTruecallerVerification, user } =
-    useTruecaller(truecallerConfig);
+  const {
+    initializeTruecallerSDK,
+    openTruecallerForVerification,
+    userProfile,
+    error,
+  } = useTruecaller(truecallerConfig);
 
   useEffect(() => {
-    console.log(user);
-  }, [user]);
+    initializeTruecallerSDK();
+  }, [initializeTruecallerSDK]);
 
-  console.log(user);
+  useEffect(() => {
+    if (userProfile) console.log(userProfile);
+  }, [userProfile]);
+
+  useEffect(() => {
+    if (error) console.log('Truecaller error:', error);
+  }, [error]);
 
   return (
     <View style={styles.container}>
-      <Pressable onPress={initiateTruecallerVerification}>
+      <Pressable onPress={openTruecallerForVerification}>
         <Text>Sign in with truecaller</Text>
       </Pressable>
     </View>
