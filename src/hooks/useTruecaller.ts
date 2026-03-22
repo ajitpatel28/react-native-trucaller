@@ -49,7 +49,7 @@ export const useTruecaller = (
       }
 
       if (Platform.OS === 'android') {
-        const androidConfig = {
+        const androidConfig: Record<string, unknown> = {
           buttonColor: config.androidButtonColor || DEFAULT_BUTTON_COLOR,
           buttonTextColor:
             config.androidButtonTextColor || DEFAULT_BUTTON_TEXT_COLOR,
@@ -60,6 +60,15 @@ export const useTruecaller = (
           consentHeading:
             config.androidConsentHeading || DEFAULT_CONSENT_HEADING,
         };
+        if (config.androidConsentMode) {
+          androidConfig.consentMode = config.androidConsentMode;
+        }
+        if (config.androidSdkOptions) {
+          androidConfig.sdkOptions = config.androidSdkOptions;
+        }
+        if (config.androidDarkMode !== undefined) {
+          androidConfig.darkMode = config.androidDarkMode;
+        }
         await TruecallerAndroidModule.initializeSdk(androidConfig);
       } else {
         await TruecallerIOS.initializeSdk(config);
@@ -75,6 +84,8 @@ export const useTruecaller = (
   useEffect(() => {
     let successListener: any;
     let failureListener: any;
+    let errorListener: any;
+    let verificationRequiredListener: any;
 
     if (isTruecallerInitialized) {
       if (Platform.OS === 'android') {
@@ -85,7 +96,6 @@ export const useTruecaller = (
         successListener = DeviceEventEmitter.addListener(
           TRUECALLER_ANDROID_EVENTS.SUCCESS,
           (data: TruecallerAndroidResponse) => {
-            // custom handler if provided, otherwise default handler
             if (config.androidSuccessHandler) {
               config.androidSuccessHandler(data);
             } else {
@@ -93,12 +103,23 @@ export const useTruecaller = (
             }
           }
         );
-
         failureListener = DeviceEventEmitter.addListener(
           TRUECALLER_ANDROID_EVENTS.FAILURE,
           (err: { errorMessage: string }) => {
             setError(err.errorMessage);
             setUserProfile(null);
+          }
+        );
+        errorListener = DeviceEventEmitter.addListener(
+          TRUECALLER_ANDROID_EVENTS.ERROR,
+          (err: { errorMessage: string }) => {
+            setError(err.errorMessage);
+          }
+        );
+        verificationRequiredListener = DeviceEventEmitter.addListener(
+          TRUECALLER_ANDROID_EVENTS.VERIFICATION_REQUIRED,
+          (err: { errorMessage: string }) => {
+            setError(err.errorMessage);
           }
         );
       } else if (Platform.OS === 'ios') {
@@ -112,7 +133,6 @@ export const useTruecaller = (
           TRUECALLER_IOS_EVENTS.SUCCESS,
           handleAuthorizationSuccess
         );
-
         failureListener = eventEmitter.addListener(
           TRUECALLER_IOS_EVENTS.FAILURE,
           (err: { errorMessage: string }) => {
@@ -124,20 +144,10 @@ export const useTruecaller = (
     }
 
     return () => {
-      if (successListener) {
-        if (Platform.OS === 'android') {
-          successListener.remove();
-        } else {
-          successListener.remove();
-        }
-      }
-      if (failureListener) {
-        if (Platform.OS === 'android') {
-          failureListener.remove();
-        } else {
-          failureListener.remove();
-        }
-      }
+      successListener?.remove();
+      failureListener?.remove();
+      errorListener?.remove();
+      verificationRequiredListener?.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isTruecallerInitialized, config]);
@@ -223,9 +233,9 @@ export const useTruecaller = (
       phoneNumber: data.phoneNumber,
     }) as TruecallerUserProfile;
 
-  const isSdkUsable = () => {
+  const isSdkUsable = async (): Promise<boolean> => {
     if (Platform.OS === 'android') return TruecallerAndroidModule.isSdkUsable();
-    else if (Platform.OS === 'ios') return TruecallerIOS.isSupported();
+    if (Platform.OS === 'ios') return TruecallerIOS.isSupported();
     return false;
   };
 
@@ -236,7 +246,7 @@ export const useTruecaller = (
     }
 
     try {
-      if (!isSdkUsable()) {
+      if (!(await isSdkUsable())) {
         throw new Error('Truecaller SDK is not usable on this device');
       }
       if (Platform.OS === 'android') {
@@ -257,6 +267,12 @@ export const useTruecaller = (
     }
   }, [isTruecallerInitialized, config]);
 
+  const clearTruecallerSdk = useCallback(() => {
+    if (Platform.OS === 'android') {
+      TruecallerAndroidModule.clearSdk();
+    }
+  }, []);
+
   return {
     userProfile,
     error,
@@ -264,5 +280,6 @@ export const useTruecaller = (
     initializeTruecallerSDK,
     isSdkUsable,
     openTruecallerForVerification,
+    clearTruecallerSdk,
   };
 };

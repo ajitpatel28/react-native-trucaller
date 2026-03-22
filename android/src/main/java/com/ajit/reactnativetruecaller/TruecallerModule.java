@@ -1,10 +1,12 @@
 package com.ajit.reactnativetruecaller;
 
 import android.app.Activity;
-import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Color;
 
 import androidx.annotation.Nullable;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.fragment.app.FragmentActivity;
 
 import com.facebook.react.bridge.*;
@@ -15,15 +17,17 @@ import java.math.BigInteger;
 import java.security.SecureRandom;
 import java.util.Locale;
 
-public class TruecallerModule extends ReactContextBaseJavaModule {
+public class TruecallerModule extends ReactContextBaseJavaModule implements LifecycleEventListener {
     private static final String MODULE_NAME = "TruecallerModule";
     private final ReactApplicationContext reactContext;
     private String codeVerifier;
+    private ActivityResultLauncher<android.content.Intent> launcher;
+    private Boolean isDarkMode = null; // null = resolve from system at call time
 
     public TruecallerModule(ReactApplicationContext context) {
         super(context);
         reactContext = context;
-        reactContext.addActivityEventListener(activityEventListener);
+        reactContext.addLifecycleEventListener(this);
     }
 
     @Override
@@ -31,31 +35,74 @@ public class TruecallerModule extends ReactContextBaseJavaModule {
         return MODULE_NAME;
     }
 
+    @Override
+    public void onHostResume() {
+        Activity currentActivity = getCurrentActivity();
+        if (currentActivity instanceof FragmentActivity && launcher == null) {
+            registerLauncher((FragmentActivity) currentActivity);
+        }
+    }
+
+    private void registerLauncher(FragmentActivity fragmentActivity) {
+        launcher = fragmentActivity.getActivityResultRegistry().register(
+            "truecaller_oauth",
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                try {
+                    TcSdk.getInstance().onActivityResultObtained(
+                        fragmentActivity, result.getResultCode(), result.getData()
+                    );
+                } catch (Exception e) {
+                    emitErrorEvent(e.getMessage());
+                }
+            }
+        );
+    }
+
+    @Override
+    public void onHostPause() {}
+
+    @Override
+    public void onHostDestroy() {
+        cleanUp();
+    }
+
+    private void cleanUp() {
+        TcSdk.clear();
+        if (launcher != null) {
+            launcher.unregister();
+            launcher = null;
+        }
+    }
+
     private final TcOAuthCallback oauthCallback = new TcOAuthCallback() {
         @Override
         public void onSuccess(TcOAuthData oauthData) {
-            WritableMap params = createSuccessMap(oauthData);
-            emitEvent("TruecallerAndroidSuccess", params);
+            emitEvent("TruecallerAndroidSuccess", createSuccessMap(oauthData));
         }
 
         @Override
         public void onFailure(TcOAuthError oauthError) {
-            WritableMap params = createErrorMap(oauthError.getErrorCode(), oauthError.getErrorMessage());
-            emitEvent("TruecallerAndroidFailure", params);
+            emitEvent("TruecallerAndroidFailure", createErrorMap(oauthError.getErrorCode(), oauthError.getErrorMessage()));
         }
 
         @Override
         public void onVerificationRequired(TcOAuthError oauthError) {
-            WritableMap params = createErrorMap(oauthError.getErrorCode(), oauthError.getErrorMessage());
-            emitEvent("TruecallerAndroidVerificationRequired", params);
+            emitEvent("TruecallerAndroidVerificationRequired", createErrorMap(oauthError.getErrorCode(), oauthError.getErrorMessage()));
         }
     };
 
     @ReactMethod
     public void initializeSdk(ReadableMap config) {
         try {
-            TcSdkOptions sdkOptions = buildSdkOptions(config);
-            TcSdk.init(sdkOptions);
+            isDarkMode = config.hasKey("darkMode") ? config.getBoolean("darkMode") : null;
+            TcSdk.init(buildSdkOptions(config));
+            if (config.hasKey("languageCode")) {
+                String languageCode = config.getString("languageCode");
+                if (languageCode != null && !languageCode.isEmpty()) {
+                    TcSdk.getInstance().setLocale(new Locale(languageCode));
+                }
+            }
         } catch (Exception e) {
             emitErrorEvent(e.getMessage());
         }
@@ -73,13 +120,22 @@ public class TruecallerModule extends ReactContextBaseJavaModule {
                 emitErrorEvent("Current activity is not a FragmentActivity");
                 return;
             }
+            FragmentActivity fragmentActivity = (FragmentActivity) currentActivity;
+
+            // Fallback: register launcher if onHostResume hasn't fired yet
+            if (launcher == null) {
+                registerLauncher(fragmentActivity);
+            }
+
             String state = generateOAuthState();
             String codeChallenge = generateCodeChallenge();
 
             TcSdk.getInstance().setOAuthState(state);
             TcSdk.getInstance().setOAuthScopes(new String[]{"profile", "phone", "email"});
             TcSdk.getInstance().setCodeChallenge(codeChallenge);
-            TcSdk.getInstance().getAuthorizationCode((FragmentActivity) currentActivity);
+            boolean darkMode = isDarkMode != null ? isDarkMode : isSystemDarkMode();
+            TcSdk.getInstance().setTheme(darkMode ? OAuthThemeOptions.DARK : OAuthThemeOptions.LIGHT);
+            TcSdk.getInstance().getAuthorizationCode(fragmentActivity, launcher);
         } catch (Exception e) {
             emitErrorEvent(e.getMessage());
         }
@@ -88,59 +144,54 @@ public class TruecallerModule extends ReactContextBaseJavaModule {
     @ReactMethod
     public void isSdkUsable(Promise promise) {
         try {
-            boolean isUsable = TcSdk.getInstance().isOAuthFlowUsable();
+            TcSdk instance = TcSdk.getInstance();
+            boolean isUsable = instance != null && instance.isOAuthFlowUsable();
             promise.resolve(isUsable);
         } catch (Exception e) {
             promise.reject("ERROR", e.getMessage());
         }
     }
 
-private TcSdkOptions buildSdkOptions(ReadableMap config) {
-    TcSdkOptions.Builder sdkOptionsBuilder = new TcSdkOptions.Builder(reactContext, oauthCallback);
-
-    if (config.hasKey("buttonColor")) {
-        String buttonColor = config.getString("buttonColor");
-        sdkOptionsBuilder.buttonColor(Color.parseColor(buttonColor));
-    }
-    if (config.hasKey("buttonTextColor")) {
-        String buttonTextColor = config.getString("buttonTextColor");
-        sdkOptionsBuilder.buttonTextColor(Color.parseColor(buttonTextColor));
-    }
-    if (config.hasKey("buttonText")) {
-        String buttonText = config.getString("buttonText");
-        sdkOptionsBuilder.ctaText(mapCtaText(buttonText));
-    }
-    if (config.hasKey("buttonShape")) {
-        String buttonShape = config.getString("buttonShape");
-        sdkOptionsBuilder.buttonShapeOptions(mapButtonShape(buttonShape));
-    }
-    if (config.hasKey("footerButtonText")) {
-        String footerButtonText = config.getString("footerButtonText");
-        sdkOptionsBuilder.footerType(mapFooterText(footerButtonText));
-    }
-    if (config.hasKey("consentHeading")) {
-        String consentHeading = config.getString("consentHeading");
-        sdkOptionsBuilder.consentHeadingOption(mapConsentHeading(consentHeading));
+    @ReactMethod
+    public void clearSdk() {
+        cleanUp();
     }
 
-    TcSdkOptions sdkOptions = sdkOptionsBuilder.build();
+    private TcSdkOptions buildSdkOptions(ReadableMap config) {
+        TcSdkOptions.Builder sdkOptionsBuilder = new TcSdkOptions.Builder(reactContext, oauthCallback);
 
-    // Set locale after building the options
-    if (config.hasKey("languageCode")) {
-        String languageCode = config.getString("languageCode");
-        if (languageCode != null && !languageCode.isEmpty()) {
-            Locale locale = new Locale(languageCode);
-            TcSdk.getInstance().setLocale(locale);
+        if (config.hasKey("buttonColor")) {
+            sdkOptionsBuilder.buttonColor(Color.parseColor(config.getString("buttonColor")));
         }
-    }
+        if (config.hasKey("buttonTextColor")) {
+            sdkOptionsBuilder.buttonTextColor(Color.parseColor(config.getString("buttonTextColor")));
+        }
+        if (config.hasKey("buttonText")) {
+            sdkOptionsBuilder.ctaText(mapCtaText(config.getString("buttonText")));
+        }
+        if (config.hasKey("buttonShape")) {
+            sdkOptionsBuilder.buttonShapeOptions(mapButtonShape(config.getString("buttonShape")));
+        }
+        if (config.hasKey("footerButtonText")) {
+            sdkOptionsBuilder.footerType(mapFooterText(config.getString("footerButtonText")));
+        }
+        if (config.hasKey("consentHeading")) {
+            sdkOptionsBuilder.consentHeadingOption(mapConsentHeading(config.getString("consentHeading")));
+        }
+        if (config.hasKey("consentMode")) {
+            sdkOptionsBuilder.consentMode(mapConsentMode(config.getString("consentMode")));
+        }
 
-    return sdkOptions;
-}
+        if (config.hasKey("sdkOptions")) {
+            sdkOptionsBuilder.sdkOptions(mapSdkOptions(config.getString("sdkOptions")));
+        }
+
+
+        return sdkOptionsBuilder.build();
+    }
 
     private String generateOAuthState() {
-        SecureRandom random = new SecureRandom();
-        BigInteger stateBigInt = new BigInteger(130, random);
-        return stateBigInt.toString(32);
+        return new BigInteger(130, new SecureRandom()).toString(32);
     }
 
     private String generateCodeChallenge() {
@@ -148,15 +199,11 @@ private TcSdkOptions buildSdkOptions(ReadableMap config) {
         return CodeVerifierUtil.Companion.getCodeChallenge(codeVerifier);
     }
 
-    private final ActivityEventListener activityEventListener = new BaseActivityEventListener() {
-        @Override
-        public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data) {
-            super.onActivityResult(activity, requestCode, resultCode, data);
-            if (requestCode == TcSdk.SHARE_PROFILE_REQUEST_CODE) {
-                TcSdk.getInstance().onActivityResultObtained((FragmentActivity) activity, requestCode, resultCode, data);
-            }
-        }
-    };
+    private boolean isSystemDarkMode() {
+        int nightMode = reactContext.getResources().getConfiguration().uiMode
+                & Configuration.UI_MODE_NIGHT_MASK;
+        return nightMode == Configuration.UI_MODE_NIGHT_YES;
+    }
 
     private void emitEvent(String eventName, @Nullable WritableMap params) {
         reactContext
@@ -166,8 +213,7 @@ private TcSdkOptions buildSdkOptions(ReadableMap config) {
     }
 
     private void emitErrorEvent(String errorMessage) {
-        WritableMap params = createErrorMap(0, errorMessage);
-        emitEvent("TruecallerAndroidError", params);
+        emitEvent("TruecallerAndroidError", createErrorMap(0, errorMessage));
     }
 
     private WritableMap createSuccessMap(TcOAuthData data) {
@@ -184,7 +230,21 @@ private TcSdkOptions buildSdkOptions(ReadableMap config) {
         return params;
     }
 
-    // Mapping functions with all available options
+    // --- Mapping functions ---
+
+    private int mapConsentMode(String consentMode) {
+        if ("TRUECALLER_ANDROID_CONSENT_MODE_POPUP".equals(consentMode)) {
+            return TcSdkOptions.CONSENT_MODE_POPUP;
+        }
+        return TcSdkOptions.CONSENT_MODE_BOTTOMSHEET;
+    }
+
+    private int mapSdkOptions(String sdkOption) {
+        if ("TRUECALLER_ANDROID_SDK_OPTION_VERIFY_ALL_USERS".equals(sdkOption)) {
+            return TcSdkOptions.OPTION_VERIFY_ALL_USERS;
+        }
+        return TcSdkOptions.OPTION_VERIFY_ONLY_TC_USERS;
+    }
 
     private int mapCtaText(String ctaText) {
         switch (ctaText) {
@@ -200,12 +260,10 @@ private TcSdkOptions buildSdkOptions(ReadableMap config) {
     }
 
     private int mapButtonShape(String buttonShape) {
-         switch (buttonShape) {
-            case "TRUECALLER_ANDROID_BUTTON_SHAPE_RECTANGLE":
-                return TcSdkOptions.BUTTON_SHAPE_RECTANGLE;
-            default:
-                return TcSdkOptions.BUTTON_SHAPE_ROUNDED;
-      }
+        if ("TRUECALLER_ANDROID_BUTTON_SHAPE_RECTANGLE".equals(buttonShape)) {
+            return TcSdkOptions.BUTTON_SHAPE_RECTANGLE;
+        }
+        return TcSdkOptions.BUTTON_SHAPE_ROUNDED;
     }
 
     private int mapFooterText(String footerText) {

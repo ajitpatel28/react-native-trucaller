@@ -34,6 +34,22 @@ export type TruecallerConsentHeadingValue =
   (typeof TRUECALLER_ANDROID_CUSTOMIZATIONS.CONSENT_HEADINGS)[TruecallerConsentHeadingKey];
 
 /**
+ * Type for Consent Mode Customizations
+ */
+export type TruecallerConsentModeKey =
+  keyof typeof TRUECALLER_ANDROID_CUSTOMIZATIONS.CONSENT_MODES;
+export type TruecallerConsentModeValue =
+  (typeof TRUECALLER_ANDROID_CUSTOMIZATIONS.CONSENT_MODES)[TruecallerConsentModeKey];
+
+/**
+ * Type for SDK Options
+ */
+export type TruecallerSdkOptionKey =
+  keyof typeof TRUECALLER_ANDROID_CUSTOMIZATIONS.SDK_OPTIONS;
+export type TruecallerSdkOptionValue =
+  (typeof TRUECALLER_ANDROID_CUSTOMIZATIONS.SDK_OPTIONS)[TruecallerSdkOptionKey];
+
+/**
  * Configuration interface for initializing Truecaller
  */
 export interface TruecallerConfig {
@@ -55,6 +71,12 @@ export interface TruecallerConfig {
   androidFooterButtonText?: TruecallerFooterButtonTextValue;
   /** Heading text for the consent screen on Android */
   androidConsentHeading?: TruecallerConsentHeadingValue;
+  /** Consent UI mode: BOTTOMSHEET (default) or POPUP (center) */
+  androidConsentMode?: TruecallerConsentModeValue;
+  /** Whether to verify only Truecaller users or all users */
+  androidSdkOptions?: TruecallerSdkOptionValue;
+  /** Enable dark mode for the consent screen on Android (defaults to system setting) */
+  androidDarkMode?: boolean;
   /** Custom handler for Android success events if you want to handle them yourself */
   androidSuccessHandler?: (data: TruecallerAndroidResponse) => void;
 }
@@ -106,6 +128,7 @@ export interface UseTruecallerResult {
   error: string | null;
   isTruecallerInitialized: boolean;
   initializeTruecallerSDK: () => Promise<void>;
-  isSdkUsable: () => boolean;
+  isSdkUsable: () => Promise<boolean>;
   openTruecallerForVerification: () => Promise<void>;
+  clearTruecallerSdk: () => void;
 }

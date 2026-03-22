@@ -21,4 +21,8 @@ export type {
   TruecallerFooterButtonTextValue,
   TruecallerConsentHeadingKey,
   TruecallerConsentHeadingValue,
+  TruecallerConsentModeKey,
+  TruecallerConsentModeValue,
+  TruecallerSdkOptionKey,
+  TruecallerSdkOptionValue,
 } from './interfaces';

@@ -1,7 +1,7 @@
 # @ajitpatel28/react-native-truecaller
 
 
-React Native library for seamless Truecaller integration, supporting Android SDK v3.0.1 and iOS SDK v0.1.8
+React Native library for seamless Truecaller integration, supporting Android SDK v3.2.1 and iOS SDK v0.1.8
 
 ###### Note: Ios stil need fixes, will be updating soon, any contributions are welcomed.
 
@@ -11,6 +11,34 @@ React Native library for seamless Truecaller integration, supporting Android SDK
 - Customizable UI options for Android
 - Simplified user authentication flow
 - TypeScript support
+
+## Breaking Changes
+
+### v0.9.0
+
+- `isSdkUsable()` now returns `Promise<boolean>` instead of `boolean`. Any call site that reads the result synchronously must be updated to await the call.
+
+## Migration Guide
+
+### `isSdkUsable` — sync to async
+
+**Before:**
+
+```typescript
+const usable = isSdkUsable();
+if (usable) {
+  openTruecallerForVerification();
+}
+```
+
+**After:**
+
+```typescript
+const usable = await isSdkUsable();
+if (usable) {
+  openTruecallerForVerification();
+}
+```
 
 ## Installation
 
@@ -72,6 +100,25 @@ Replace `{YOUR_APP_ID}` with your actual Truecaller App ID.
 ### Android Setup
 
 To generate a client ID, follow the instructions in the [Truecaller Android Guide](https://docs.truecaller.com/truecaller-sdk/android/oauth-sdk-3.0.0/integration-steps/generating-client-id).
+
+#### Expo
+
+Add the plugin to your `app.json` / `app.config.js` — it automatically injects the client ID into `AndroidManifest.xml`:
+
+```json
+{
+  "plugins": [
+    [
+      "@ajitpatel28/react-native-truecaller",
+      { "androidClientId": "YOUR_CLIENT_ID" }
+    ]
+  ]
+}
+```
+
+Then run `npx expo prebuild` (or `eas build`) to apply the changes.
+
+#### Bare React Native
 
 1. Add the Truecaller SDK client ID to your `AndroidManifest.xml` file inside the `<application>` tag:
 
@@ -165,14 +212,18 @@ A custom hook that provides access to Truecaller functionality.
   - `androidButtonText`: (optional) Text displayed on the Truecaller button on Android
   - `androidFooterButtonText`: (optional) Text displayed on the footer button on Android
   - `androidConsentHeading`: (optional) Heading text for the consent screen on Android
+  - `androidConsentMode`: (optional) Controls how the consent UI is presented on Android. Accepted values: `'TRUECALLER_ANDROID_CONSENT_MODE_BOTTOMSHEET'` (default) or `'TRUECALLER_ANDROID_CONSENT_MODE_POPUP'`
+  - `androidSdkOptions`: (optional) Controls which users can be verified on Android. Accepted values: `'TRUECALLER_ANDROID_SDK_OPTION_VERIFY_ONLY_TC_USERS'` (default) or `'TRUECALLER_ANDROID_SDK_OPTION_VERIFY_ALL_USERS'`
+  - `androidDarkMode`: (optional, boolean) When `true`, forces dark mode on the consent UI. When `false`, forces light mode. Omit to follow the system theme.
   - `androidSuccessHandler`: (optional) Callback function invoked on Android when Truecaller succeeds with a response. It receives a parameter of type `TruecallerAndroidResponse` containing the success data. Pass this function if you want to do server side validation of the Truecaller response.
 
 #### Returns
 
-- `initializeSDK(): Promise<void>`: Initializes the Truecaller SDK.
-- `isTrucallerInitialized: boolean`: Returns true if the Truecaller SDK is initialized.
-- `isSdkUsable(): boolean`: Returns true if the Truecaller SDK is usable on the current device.
+- `initializeTruecallerSDK(): Promise<void>`: Initializes the Truecaller SDK.
+- `isTruecallerInitialized: boolean`: Returns true if the Truecaller SDK is initialized.
+- `isSdkUsable(): Promise<boolean>`: Returns a promise that resolves to `true` if the Truecaller SDK is usable on the current device. Must be awaited.
 - `openTruecallerForVerification(): Promise<void>`: Requests the user's Truecaller verification.
+- `clearTruecallerSdk(): void`: Clears the SDK state and unregisters the activity result launcher. Android only.
 - `userProfile`: The user's Truecaller profile (if available). For android, it will be available only if androidSuccessHandler is not provided then library will internally handle the validation and will return the userProfile
 - `error`: Any error that occurred during the Truecaller operations.
 
@@ -189,7 +240,54 @@ import {
 } from '@ajitpatel28/react-native-truecaller';
 ```
 
-These constants include options for button styles, consent modes, event types, and supported languages.
+### `TRUECALLER_ANDROID_EVENTS`
+
+| Key                   | Value                                  | Description                                      |
+| --------------------- | -------------------------------------- | ------------------------------------------------ |
+| `ERROR`               | `'TruecallerAndroidError'`             | Emitted when an error occurs during verification |
+| `VERIFICATION_REQUIRED` | `'TruecallerAndroidVerificationRequired'` | Emitted when additional verification is needed |
+
+### `TRUECALLER_ANDROID_CUSTOMIZATIONS`
+
+#### `CONSENT_MODES`
+
+Controls how the consent UI is presented.
+
+| Key           | Value                                           |
+| ------------- | ----------------------------------------------- |
+| `BOTTOMSHEET` | `'TRUECALLER_ANDROID_CONSENT_MODE_BOTTOMSHEET'` |
+| `POPUP`       | `'TRUECALLER_ANDROID_CONSENT_MODE_POPUP'`       |
+
+#### `SDK_OPTIONS`
+
+Controls which users can be verified.
+
+| Key                    | Value                                                  |
+| ---------------------- | ------------------------------------------------------ |
+| `VERIFY_ONLY_TC_USERS` | `'TRUECALLER_ANDROID_SDK_OPTION_VERIFY_ONLY_TC_USERS'` |
+| `VERIFY_ALL_USERS`     | `'TRUECALLER_ANDROID_SDK_OPTION_VERIFY_ALL_USERS'`     |
+
+The library also provides constants for button styles, event types, and supported languages through the same imports above.
+
+## Types
+
+The following types are exported for use in TypeScript projects:
+
+```typescript
+import type {
+  TruecallerConsentModeKey,
+  TruecallerConsentModeValue,
+  TruecallerSdkOptionKey,
+  TruecallerSdkOptionValue,
+} from '@ajitpatel28/react-native-truecaller';
+```
+
+| Type                      | Description                                              |
+| ------------------------- | -------------------------------------------------------- |
+| `TruecallerConsentModeKey`   | Union of valid keys for `CONSENT_MODES`               |
+| `TruecallerConsentModeValue` | Union of valid values for `CONSENT_MODES`             |
+| `TruecallerSdkOptionKey`     | Union of valid keys for `SDK_OPTIONS`                 |
+| `TruecallerSdkOptionValue`   | Union of valid values for `SDK_OPTIONS`               |
 
 ## Error Handling
 
