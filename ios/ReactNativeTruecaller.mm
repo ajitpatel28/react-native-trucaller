@@ -1,70 +1,103 @@
 #import "ReactNativeTruecaller.h"
-#import <React/RCTBridge.h>
-#import <React/RCTRootView.h>
 #import <TrueSDK/TrueSDK.h>
+
+@interface ReactNativeTruecaller () <TCTrueSDKDelegate>
+@property (nonatomic, strong) TCTrueProfileResponse *pendingProfileResponse;
+@end
 
 @implementation ReactNativeTruecaller
 
 RCT_EXPORT_MODULE()
 
++ (BOOL)requiresMainQueueSetup {
+  return NO;
+}
+
 - (NSArray<NSString *> *)supportedEvents {
-    return @[@"TruecallerIOSSuccess", @"TruecallerIOSFailure"];
+  return @[@"TruecallerIOSSuccess", @"TruecallerIOSFailure"];
 }
 
 RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(isSupported) {
-    @try {
-        return @([[TCTrueSDK sharedManager] isSupported]);
-    }
-    @catch (NSException *exception) {
-        [self sendTruecallerFailureEvent:0 message:exception.reason];
-        return @NO;
-    }
+  return @([TCTrueSDK sharedManager].isSupported);
 }
 
 RCT_EXPORT_METHOD(initialize:(NSString *)appKey appLink:(NSString *)appLink) {
-    if ([[TCTrueSDK sharedManager] isSupported]) {
-        [[TCTrueSDK sharedManager] setupWithAppKey:appKey appLink:appLink];
-        [TCTrueSDK sharedManager].delegate = self;
-    } else {
-        [self sendTruecallerFailureEvent:0 message:@"Please make sure you have truecaller app installed on your device."];
-    }
+  if ([TCTrueSDK sharedManager].isSupported) {
+    [[TCTrueSDK sharedManager] setupWithAppKey:appKey appLink:appLink];
+    [TCTrueSDK sharedManager].delegate = self;
+  } else {
+    [self sendFailureEventWithCode:0 message:@"Please make sure you have truecaller app installed on your device."];
+  }
 }
 
 RCT_EXPORT_METHOD(requestProfile) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [[TCTrueSDK sharedManager] requestTrueProfile];
-    });
+  self.pendingProfileResponse = nil;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [[TCTrueSDK sharedManager] requestTrueProfile];
+  });
 }
 
-+ (BOOL)handleUserActivity:(NSUserActivity *)userActivity
-        restorationHandler:(void (^)(NSArray *restorableObjects))restorationHandler {
-    return [[TCTrueSDK sharedManager] application:[UIApplication sharedApplication] continueUserActivity:userActivity restorationHandler:restorationHandler];
++ (BOOL)handle:(NSUserActivity *)userActivity
+        restorationHandler:(void (^)(NSArray<id<UIUserActivityRestoring>> * _Nullable))restorationHandler {
+  return [[TCTrueSDK sharedManager] application:[UIApplication sharedApplication]
+                           continueUserActivity:userActivity
+                             restorationHandler:restorationHandler];
 }
+
++ (BOOL)handleOpenURL:(NSURL *)url {
+  return [[TCTrueSDK sharedManager] continueWithUrlScheme:url];
+}
+
+// MARK: - TCTrueSDKDelegate
 
 - (void)didReceiveTrueProfileResponse:(TCTrueProfileResponse *)profileResponse {
-    NSDictionary *profileData = @{
-        @"firstName": profileResponse.profile.firstName ?: [NSNull null],
-        @"lastName": profileResponse.profile.lastName ?: [NSNull null],
-        @"email": profileResponse.profile.email ?: [NSNull null],
-        @"phoneNumber": profileResponse.profile.phoneNumber ?: [NSNull null],
-        @"countryCode": profileResponse.profile.countryCode ?: [NSNull null],
-        @"gender": profileResponse.profile.gender ?: [NSNull null],
-    };
+  self.pendingProfileResponse = profileResponse;
+}
 
-    [self sendEventWithName:@"TruecallerIOSSuccess" body:profileData];
+- (void)didReceiveTrueProfile:(TCTrueProfile *)profile {
+  NSMutableDictionary *data = [NSMutableDictionary dictionaryWithDictionary:@{
+    @"firstName":        profile.firstName        ?: [NSNull null],
+    @"lastName":         profile.lastName         ?: [NSNull null],
+    @"phoneNumber":      profile.phoneNumber      ?: [NSNull null],
+    @"countryCode":      profile.countryCode      ?: [NSNull null],
+    @"email":            profile.email            ?: [NSNull null],
+    @"street":           profile.street           ?: [NSNull null],
+    @"city":             profile.city             ?: [NSNull null],
+    @"zipCode":          profile.zipCode          ?: [NSNull null],
+    @"facebookID":       profile.facebookID       ?: [NSNull null],
+    @"twitterID":        profile.twitterID        ?: [NSNull null],
+    @"url":              profile.url              ?: [NSNull null],
+    @"avatarURL":        profile.avatarURL        ?: [NSNull null],
+    @"jobTitle":         profile.jobTitle         ?: [NSNull null],
+    @"companyName":      profile.companyName      ?: [NSNull null],
+    @"gender":           @(profile.gender),
+    @"isVerified":       @(profile.isVerified),
+    @"isAmbassador":     @(profile.isAmbassador),
+  }];
+
+  if (self.pendingProfileResponse) {
+    data[@"payload"]            = self.pendingProfileResponse.payload            ?: [NSNull null];
+    data[@"signature"]          = self.pendingProfileResponse.signature          ?: [NSNull null];
+    data[@"signatureAlgorithm"] = self.pendingProfileResponse.signatureAlgorithm ?: [NSNull null];
+    data[@"requestNonce"]       = self.pendingProfileResponse.requestNonce       ?: [NSNull null];
+    self.pendingProfileResponse = nil;
+  }
+
+  [self sendEventWithName:@"TruecallerIOSSuccess" body:data];
 }
 
 - (void)didFailToReceiveTrueProfileWithError:(TCError *)error {
-    [self sendTruecallerFailureEvent:error.code message:error.description];
+  self.pendingProfileResponse = nil;
+  [self sendFailureEventWithCode:error.code message:error.localizedDescription];
 }
 
-- (void)sendTruecallerFailureEvent:(NSInteger)errorCode message:(NSString *)errorMessage {
-    NSDictionary *errorData = @{
-        @"errorCode": @(errorCode),
-        @"errorMessage": errorMessage ?: (NSString *)[NSNull null]
-    };
+// MARK: - Private
 
-    [self sendEventWithName:@"TruecallerIOSFailure" body:errorData];
+- (void)sendFailureEventWithCode:(NSInteger)code message:(NSString *)message {
+  [self sendEventWithName:@"TruecallerIOSFailure" body:@{
+    @"errorCode":    @(code),
+    @"errorMessage": message ?: @"Unknown Truecaller error",
+  }];
 }
 
 @end

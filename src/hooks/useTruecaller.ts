@@ -71,7 +71,7 @@ export const useTruecaller = (
         }
         await TruecallerAndroidModule.initializeSdk(androidConfig);
       } else {
-        await TruecallerIOS.initializeSdk(config);
+        await TruecallerIOS.initialize(config.iosAppKey, config.iosAppLink);
       }
       setIsTruecallerInitialized(true);
       setError(null);
@@ -131,7 +131,13 @@ export const useTruecaller = (
 
         successListener = eventEmitter.addListener(
           TRUECALLER_IOS_EVENTS.SUCCESS,
-          handleAuthorizationSuccess
+          (data: TruecallerIOSResponse) => {
+            if (config.iosSuccessHandler) {
+              config.iosSuccessHandler(data);
+            } else {
+              handleAuthorizationSuccess(data);
+            }
+          }
         );
         failureListener = eventEmitter.addListener(
           TRUECALLER_IOS_EVENTS.FAILURE,
@@ -223,15 +229,14 @@ export const useTruecaller = (
 
   const mapIOSResponseToUserProfile = (
     data: TruecallerIOSResponse
-  ): TruecallerUserProfile =>
-    ({
-      firstName: data.firstName,
-      lastName: data.lastName,
-      email: data.email,
-      countryCode: data.countryCode,
-      gender: data.gender,
-      phoneNumber: data.phoneNumber,
-    }) as TruecallerUserProfile;
+  ): TruecallerUserProfile => ({
+    firstName: data.firstName,
+    lastName: data.lastName,
+    email: data.email,
+    countryCode: data.countryCode,
+    gender: data.gender !== 0 ? String(data.gender) : null,
+    phoneNumber: data.phoneNumber,
+  });
 
   const isSdkUsable = async (): Promise<boolean> => {
     if (Platform.OS === 'android') return TruecallerAndroidModule.isSdkUsable();
@@ -260,7 +265,7 @@ export const useTruecaller = (
             'iOS app key and app link are required for iOS platform'
           );
         }
-        await TruecallerIOS.requestTrueProfile();
+        await TruecallerIOS.requestProfile();
       }
     } catch (err) {
       setError((err as Error).message);
