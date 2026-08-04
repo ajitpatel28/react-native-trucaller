@@ -1,10 +1,11 @@
-#import <React/RCTBridgeModule.h>
 #import <React/RCTEventEmitter.h>
-#import <TrueSDK/TrueSDK.h>
+#import <React/RCTBridgeModule.h>
 
-@interface ReactNativeTruecaller : RCTEventEmitter <RCTBridgeModule, TCTrueSDKDelegate>
+@interface ReactNativeTruecaller : RCTEventEmitter <RCTBridgeModule>
 
-+ (BOOL)handleUserActivity:(NSUserActivity *)userActivity
-        restorationHandler:(void (^)(NSArray *restorableObjects))restorationHandler;
++ (BOOL)handle:(NSUserActivity *)userActivity
+        restorationHandler:(void (^)(NSArray<id<UIUserActivityRestoring>> * _Nullable))restorationHandler;
+
++ (BOOL)handleOpenURL:(NSURL *)url;
 
 @end

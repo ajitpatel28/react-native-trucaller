@@ -79,16 +79,18 @@ export interface TruecallerConfig {
   androidDarkMode?: boolean;
   /** Custom handler for Android success events if you want to handle them yourself */
   androidSuccessHandler?: (data: TruecallerAndroidResponse) => void;
+  /** Custom handler for iOS success events if you want to handle the raw profile yourself */
+  iosSuccessHandler?: (data: TruecallerIOSResponse) => void;
 }
 
 /**
  * User Profile Interface returned by Truecaller
  */
 export interface TruecallerUserProfile {
-  firstName: string;
+  firstName: string | null;
   lastName: string | null;
-  phoneNumber: string;
-  countryCode: string;
+  phoneNumber: string | null;
+  countryCode: string | null;
   gender: string | null;
   email: string | null;
 }
@@ -111,12 +113,28 @@ export interface TruecallerAndroidResponse {
  * iOS-specific user response interface
  */
 export interface TruecallerIOSResponse {
-  firstName: string;
+  firstName: string | null;
   lastName: string | null;
-  phoneNumber: string;
-  countryCode: string;
-  gender: string | null;
+  phoneNumber: string | null;
+  countryCode: string | null;
   email: string | null;
+  street: string | null;
+  city: string | null;
+  zipCode: string | null;
+  facebookID: string | null;
+  twitterID: string | null;
+  url: string | null;
+  avatarURL: string | null;
+  jobTitle: string | null;
+  companyName: string | null;
+  gender: number;
+  isVerified: boolean;
+  isAmbassador: boolean;
+  // Verification fields (present only when TCTrueProfileResponse is available)
+  payload?: string | null;
+  signature?: string | null;
+  signatureAlgorithm?: string | null;
+  requestNonce?: string | null;
 }
 
 /**
