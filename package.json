@@ -1,7 +1,7 @@
 {
   "name": "@ajitpatel28/react-native-truecaller",
-  "version": "0.9.0",
-  "description": "Truecaller Integration with React Native for both Android[SDK v3.0.0] and IOS[SDK v0.1.8]",
+  "version": "1.0.0",
+  "description": "Truecaller Integration with React Native for both Android[SDK v3.2.1] and IOS[TrueSDK v0.2.3]",
   "source": "./src/index.tsx",
   "main": "./lib/commonjs/index.js",
   "module": "./lib/module/index.js",
