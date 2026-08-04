@@ -1,9 +1,7 @@
 # @ajitpatel28/react-native-truecaller
 
 
-React Native library for seamless Truecaller integration, supporting Android SDK v3.2.1 and iOS SDK v0.1.8
-
-###### Note: Ios stil need fixes, will be updating soon, any contributions are welcomed.
+React Native library for seamless Truecaller integration, supporting Android SDK v3.2.1 and iOS TrueSDK v0.2.3
 
 ## Features
 
@@ -54,6 +52,29 @@ yarn add @ajitpatel28/react-native-truecaller
 
 To generate a client ID, follow the instructions in the [Truecaller IOS Guide](https://docs.truecaller.com/truecaller-sdk/android/oauth-sdk-3.0.0/integration-steps/generating-client-id).
 
+#### Expo
+
+Add the plugin to your `app.json` / `app.config.js` — it automatically configures the associated domains entitlement, forwards universal links from your `AppDelegate`, and patches the `Podfile` for TrueSDK:
+
+```json
+{
+  "plugins": [
+    [
+      "@ajitpatel28/react-native-truecaller",
+      {
+        "androidClientId": "YOUR_ANDROID_CLIENT_ID",
+        "iosAppKey": "YOUR_IOS_APP_KEY",
+        "iosAppLink": "https://your-provided-domain.com"
+      }
+    ]
+  ]
+}
+```
+
+Then run `npx expo prebuild` (or `eas build`) to apply the changes. The remaining manual steps below are for bare React Native projects, or if you need finer control than the config plugin provides.
+
+#### Bare React Native
+
 1. Add the following to your `Podfile`:
 
 ```ruby
@@ -96,6 +117,33 @@ Replace `{YOUR_APP_ID}` with your actual Truecaller App ID.
    For example: `applinks:your-provided-domain.com`
 
    Note: Do not include "http://" or "https://" in the domain.
+
+6. Forward universal links to the Truecaller SDK from your `AppDelegate`:
+
+```objc
+// AppDelegate.mm
+#import "ReactNativeTruecaller.h"
+
+- (BOOL)application:(UIApplication *)application
+continueUserActivity:(NSUserActivity *)userActivity
+  restorationHandler:(void (^)(NSArray<id<UIUserActivityRestoring>> * _Nullable))restorationHandler {
+  if ([ReactNativeTruecaller handle:userActivity restorationHandler:restorationHandler]) {
+    return YES;
+  }
+  return [super application:application continueUserActivity:userActivity restorationHandler:restorationHandler];
+}
+```
+
+Swift equivalent, in your `AppDelegate.swift`:
+
+```swift
+override func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
+  if ReactNativeTruecaller.handle(userActivity, restorationHandler: restorationHandler) {
+    return true
+  }
+  return super.application(application, continue: userActivity, restorationHandler: restorationHandler)
+}
+```
 
 ### Android Setup
 
@@ -216,6 +264,7 @@ A custom hook that provides access to Truecaller functionality.
   - `androidSdkOptions`: (optional) Controls which users can be verified on Android. Accepted values: `'TRUECALLER_ANDROID_SDK_OPTION_VERIFY_ONLY_TC_USERS'` (default) or `'TRUECALLER_ANDROID_SDK_OPTION_VERIFY_ALL_USERS'`
   - `androidDarkMode`: (optional, boolean) When `true`, forces dark mode on the consent UI. When `false`, forces light mode. Omit to follow the system theme.
   - `androidSuccessHandler`: (optional) Callback function invoked on Android when Truecaller succeeds with a response. It receives a parameter of type `TruecallerAndroidResponse` containing the success data. Pass this function if you want to do server side validation of the Truecaller response.
+  - `iosSuccessHandler`: (optional) Callback function invoked on iOS when Truecaller succeeds with a response. It receives a parameter of type `TruecallerIOSResponse` containing the raw profile (name, phone number, address, socials, avatar, and — when available — the `payload`/`signature`/`signatureAlgorithm`/`requestNonce` needed for server-side verification). Pass this function if you want to handle the raw iOS profile yourself instead of the normalized `userProfile`.
 
 #### Returns
 
