@@ -4,6 +4,7 @@ export const TRUECALLER_ANDROID_EVENTS = {
   FAILURE: 'TruecallerAndroidFailure',
   ERROR: 'TruecallerAndroidError',
   VERIFICATION_REQUIRED: 'TruecallerAndroidVerificationRequired',
+  READY: 'TruecallerAndroidReady',
 };
 
 // iOS Event Constants

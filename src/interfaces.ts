@@ -77,6 +77,8 @@ export interface TruecallerConfig {
   androidSdkOptions?: TruecallerSdkOptionValue;
   /** Enable dark mode for the consent screen on Android (defaults to system setting) */
   androidDarkMode?: boolean;
+  /** Toggle the v3.3.0 "enhanced bottom sheet" consent UI on Android (defaults to SDK default: enabled) */
+  androidEnhancedBottomSheet?: boolean;
   /** Custom handler for Android success events if you want to handle them yourself */
   androidSuccessHandler?: (data: TruecallerAndroidResponse) => void;
   /** Custom handler for iOS success events if you want to handle the raw profile yourself */

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Platform,
   NativeModules,
@@ -36,6 +36,8 @@ export const useTruecaller = (
   );
   const [error, setError] = useState<string | null>(null);
   const [isTruecallerInitialized, setIsTruecallerInitialized] = useState(false);
+  const readyListenerRef = useRef<{ remove: () => void } | null>(null);
+  const initFailureListenersRef = useRef<{ remove: () => void }[]>([]);
 
   const initializeTruecallerSDK = useCallback(async () => {
     try {
@@ -69,17 +71,86 @@ export const useTruecaller = (
         if (config.androidDarkMode !== undefined) {
           androidConfig.darkMode = config.androidDarkMode;
         }
-        await TruecallerAndroidModule.initializeSdk(androidConfig);
+        if (config.androidEnhancedBottomSheet !== undefined) {
+          androidConfig.enhancedBottomSheet = config.androidEnhancedBottomSheet;
+        }
+        // Remove any previously-registered, not-yet-fired listeners from an
+        // earlier call before registering fresh ones, to avoid stacking
+        // listeners/state updates from stale closures on retry.
+        const clearInitListeners = () => {
+          readyListenerRef.current?.remove();
+          readyListenerRef.current = null;
+          initFailureListenersRef.current.forEach((l) => l.remove());
+          initFailureListenersRef.current = [];
+        };
+        clearInitListeners();
+
+        const readyListener = DeviceEventEmitter.addListener(
+          TRUECALLER_ANDROID_EVENTS.READY,
+          () => {
+            setIsTruecallerInitialized(true);
+            setError(null);
+            clearInitListeners();
+          }
+        );
+        readyListenerRef.current = readyListener;
+
+        // Init is async: initializeSdk() only accepts the request, and a
+        // failure can be reported before isTruecallerInitialized ever becomes
+        // true, via two different native channels:
+        // - TRUECALLER_ANDROID_EVENTS.ERROR: TruecallerModule.java's
+        //   initializeSdk() catch block, for exceptions thrown on the JS
+        //   wrapper's own side (e.g. malformed config).
+        // - TRUECALLER_ANDROID_EVENTS.FAILURE: the SDK's own
+        //   TcOAuthCallback.onFailure(TcOAuthError), which is how the SDK
+        //   itself reports failures (including SdkInitError-style init
+        //   failures) through the same callback used for the OAuth flow.
+        // Without listeners registered up front for both, an init-time
+        // failure would be dropped on the floor and the hook would hang
+        // silently forever.
+        const handleInitFailure = (err: { errorMessage: string }) => {
+          setError(err.errorMessage);
+          clearInitListeners();
+        };
+        initFailureListenersRef.current = [
+          DeviceEventEmitter.addListener(
+            TRUECALLER_ANDROID_EVENTS.ERROR,
+            handleInitFailure
+          ),
+          DeviceEventEmitter.addListener(
+            TRUECALLER_ANDROID_EVENTS.FAILURE,
+            handleInitFailure
+          ),
+        ];
+
+        try {
+          await TruecallerAndroidModule.initializeSdk(androidConfig);
+        } catch (initErr) {
+          // If native init itself throws, remove the pending listeners so a
+          // late/racing event can't silently flip isTruecallerInitialized
+          // back to true, or double-report an error, after we've reported it.
+          clearInitListeners();
+          throw initErr;
+        }
       } else {
         await TruecallerIOS.initialize(config.iosAppKey, config.iosAppLink);
+        setIsTruecallerInitialized(true);
+        setError(null);
       }
-      setIsTruecallerInitialized(true);
-      setError(null);
     } catch (err) {
       setError((err as Error).message);
       setIsTruecallerInitialized(false);
     }
   }, [config]);
+
+  useEffect(() => {
+    return () => {
+      readyListenerRef.current?.remove();
+      readyListenerRef.current = null;
+      initFailureListenersRef.current.forEach((l) => l.remove());
+      initFailureListenersRef.current = [];
+    };
+  }, []);
 
   useEffect(() => {
     let successListener: any;
