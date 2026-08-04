@@ -5,6 +5,8 @@ import {
   withEntitlementsPlist,
   withDangerousMod,
   withAppDelegate,
+  withAppBuildGradle,
+  withGradleProperties,
   AndroidConfig,
 } from '@expo/config-plugins';
 import * as fs from 'fs';
@@ -22,6 +24,64 @@ const withTruecaller: ConfigPlugin<TruecallerPluginProps> = (
   config,
   { androidClientId, iosAppKey, iosAppLink }
 ) => {
+  // Android: truecaller-sdk 3.3.0 needs Java 21. This library's own module
+  // already opts out of RN's forced Java 17 (android/gradle.properties);
+  // :app needs the same opt-out + a Java 21 compileOptions bump, since it
+  // reads this library's now-Java-21-compiled classes via autolinking.
+  // Exempting :app from RN's alignment disables it app-wide (RN checks the
+  // app project first, short-circuiting its whole per-module loop), which
+  // can make other Kotlin dependencies hit "Inconsistent JVM Target
+  // Compatibility" — harmless on Android (all DEX either way), so we relax
+  // that check to a warning instead of re-forcing every dependency's target
+  // ourselves (kotlin.jvm.target.validation.mode, see
+  // https://kotlinlang.org/docs/gradle-configure-project.html).
+  config = withDangerousMod(config, [
+    'android',
+    (modConfig) => {
+      const appGradlePropertiesPath = path.join(
+        modConfig.modRequest.platformProjectRoot,
+        'app',
+        'gradle.properties'
+      );
+      const marker = 'react.internal.disableJavaVersionAlignment';
+      let contents = fs.existsSync(appGradlePropertiesPath)
+        ? fs.readFileSync(appGradlePropertiesPath, 'utf8')
+        : '';
+      if (!contents.includes(marker)) {
+        if (contents.length > 0 && !contents.endsWith('\n')) {
+          contents += '\n';
+        }
+        contents += `${marker}=true\n`;
+        fs.writeFileSync(appGradlePropertiesPath, contents);
+      }
+      return modConfig;
+    },
+  ]);
+
+  config = withAppBuildGradle(config, (modConfig) => {
+    const marker = '// @ajitpatel28/react-native-truecaller: Java 21';
+    if (!modConfig.modResults.contents.includes(marker)) {
+      modConfig.modResults.contents = modConfig.modResults.contents.replace(
+        /(\bandroid\s*\{)/,
+        `$1\n    ${marker}\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_21\n        targetCompatibility JavaVersion.VERSION_21\n    }`
+      );
+    }
+    return modConfig;
+  });
+
+  config = withGradleProperties(config, (modConfig) => {
+    const propName = 'kotlin.jvm.target.validation.mode';
+    modConfig.modResults = modConfig.modResults.filter(
+      (item) => !(item.type === 'property' && item.key === propName)
+    );
+    modConfig.modResults.push({
+      type: 'property',
+      key: propName,
+      value: 'warning',
+    });
+    return modConfig;
+  });
+
   // Android: inject ClientId meta-data
   config = withAndroidManifest(config, (modConfig) => {
     const application = AndroidConfig.Manifest.getMainApplication(

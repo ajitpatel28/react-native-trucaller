@@ -1,7 +1,7 @@
 # @ajitpatel28/react-native-truecaller
 
 
-React Native library for seamless Truecaller integration, supporting Android SDK v3.2.1 and iOS TrueSDK v0.2.3
+React Native library for seamless Truecaller integration, supporting Android SDK v3.3.0 and iOS TrueSDK v0.2.3
 
 ## Features
 
@@ -11,6 +11,37 @@ React Native library for seamless Truecaller integration, supporting Android SDK
 - TypeScript support
 
 ## Breaking Changes
+
+### v1.1.0
+
+- **Building against Android now requires a JDK 21+ toolchain**, since truecaller-sdk 3.3.0 ships Java 21 bytecode. Expo users get the required config automatically via the plugin; bare React Native users need a few manual edits. See "Android Setup" below.
+- On Android, `await initializeTruecallerSDK()` resolving no longer means the SDK is ready. Native init now goes through `TcSdk.initAsync(...)`, so the awaited call only means the native init request was *accepted* — `isTruecallerInitialized` flips to `true` later, asynchronously, once the native `TruecallerAndroidReady` event fires. Code that calls `openTruecallerForVerification()` immediately after the awaited call may now hit its "SDK is not initialized. Call initializeSDK first." guard.
+
+  **Before:**
+
+  ```typescript
+  await initializeTruecallerSDK();
+  openTruecallerForVerification(); // used to work immediately after await
+  ```
+
+  **After:**
+
+  ```typescript
+  const { initializeTruecallerSDK, isTruecallerInitialized, openTruecallerForVerification } =
+    useTruecaller(config);
+
+  useEffect(() => {
+    initializeTruecallerSDK();
+  }, []);
+
+  useEffect(() => {
+    if (isTruecallerInitialized) {
+      openTruecallerForVerification();
+    }
+  }, [isTruecallerInitialized]);
+  ```
+
+  On Android, wait for `isTruecallerInitialized` to become `true` (e.g. via a `useEffect` watching it) before calling `openTruecallerForVerification()`, rather than assuming it's ready right after `await initializeTruecallerSDK()`.
 
 ### v0.9.0
 
@@ -50,7 +81,7 @@ yarn add @ajitpatel28/react-native-truecaller
 
 ### iOS Setup
 
-To generate a client ID, follow the instructions in the [Truecaller IOS Guide](https://docs.truecaller.com/truecaller-sdk/android/oauth-sdk-3.0.0/integration-steps/generating-client-id).
+To generate an app key, follow the instructions in the [Truecaller iOS Guide](https://docs.truecaller.com/truecaller-sdk/ios/generating-app-key).
 
 #### Expo
 
@@ -75,15 +106,9 @@ Then run `npx expo prebuild` (or `eas build`) to apply the changes. The remainin
 
 #### Bare React Native
 
-1. Add the following to your `Podfile`:
+1. Run `pod install` in your iOS directory. This library is autolinked, so no manual `Podfile` entry is needed — if for some reason autolinking doesn't pick it up, add `pod '@ajitpatel28/react-native-truecaller', :path => '../node_modules/@ajitpatel28/react-native-truecaller'` yourself first.
 
-```ruby
-pod '@ajitpatel28/react-native-truecaller', :path => '../node_modules/@ajitpatel28/react-native-truecaller'
-```
-
-2. Run `pod install` in your iOS directory.
-
-3. In your iOS project, add URL schemes for Truecaller in your `Info.plist`:
+2. In your iOS project, add URL schemes for Truecaller in your `Info.plist`:
 
 ```xml
 <key>CFBundleURLTypes</key>
@@ -91,15 +116,15 @@ pod '@ajitpatel28/react-native-truecaller', :path => '../node_modules/@ajitpatel
 <dict>
   <key>CFBundleURLSchemes</key>
   <array>
-    <string>truecallersdk-{YOUR_APP_ID}</string>
+    <string>truecallersdk-{YOUR_APP_KEY}</string>
   </array>
 </dict>
 </array>
 ```
 
-Replace `{YOUR_APP_ID}` with your actual Truecaller App ID.
+Replace `{YOUR_APP_KEY}` with your actual Truecaller app key.
 
-4. Add the `truesdk` entry under `LSApplicationQueriesSchemes` in your `Info.plist` file:
+3. Add the `truesdk` entry under `LSApplicationQueriesSchemes` in your `Info.plist` file:
 
 ```xml
 <key>LSApplicationQueriesSchemes</key>
@@ -108,7 +133,7 @@ Replace `{YOUR_APP_ID}` with your actual Truecaller App ID.
 </array>
 ```
 
-5. Add the associated domain provided by Truecaller:
+4. Add the associated domain provided by Truecaller:
   - In Xcode, go to your project's target
   - Select the "Signing & Capabilities" tab
   - Click on "+ Capability" and add "Associated Domains"
@@ -118,7 +143,7 @@ Replace `{YOUR_APP_ID}` with your actual Truecaller App ID.
 
    Note: Do not include "http://" or "https://" in the domain.
 
-6. Forward universal links to the Truecaller SDK from your `AppDelegate`:
+5. Forward universal links to the Truecaller SDK from your `AppDelegate`:
 
 ```objc
 // AppDelegate.mm
@@ -147,7 +172,7 @@ override func application(_ application: UIApplication, continue userActivity: N
 
 ### Android Setup
 
-To generate a client ID, follow the instructions in the [Truecaller Android Guide](https://docs.truecaller.com/truecaller-sdk/android/oauth-sdk-3.0.0/integration-steps/generating-client-id).
+To generate a client ID, follow the instructions in the [Truecaller Android Guide](https://docs.truecaller.com/truecaller-sdk/android/latest-oauth-sdk-3.3.0/integration-steps/generating-client-id).
 
 #### Expo
 
@@ -166,6 +191,8 @@ Add the plugin to your `app.json` / `app.config.js` — it automatically injects
 
 Then run `npx expo prebuild` (or `eas build`) to apply the changes.
 
+The plugin handles the Java 21 config for SDK 3.3.0 automatically (see step 3 under Bare React Native for details). You still need a **JDK 21+ toolchain** to run Gradle — `JAVA_HOME` locally, or a compatible EAS Build image.
+
 #### Bare React Native
 
 1. Add the Truecaller SDK client ID to your `AndroidManifest.xml` file inside the `<application>` tag:
@@ -183,6 +210,25 @@ Replace `YOUR_CLIENT_ID` with your actual Truecaller client ID.
 ```xml
 <uses-permission android:name="android.permission.INTERNET" />
 ```
+
+3. **Important: SDK 3.3.0 needs Java 21.** Apply all three together (Expo users get these from the config plugin automatically — this step is bare-RN only):
+
+   - A JDK 21+ toolchain actually running Gradle (e.g. `JAVA_HOME`), or the build fails with `error: invalid source release: 21`.
+   - In `android/app/gradle.properties`:
+     ```properties
+     react.internal.disableJavaVersionAlignment=true
+     ```
+   - In `android/app/build.gradle`, inside `android { ... }`:
+     ```groovy
+     compileOptions {
+         sourceCompatibility JavaVersion.VERSION_21
+         targetCompatibility JavaVersion.VERSION_21
+     }
+     ```
+   - The second step disables Java/Kotlin alignment app-wide (not just `:app`), which can break other Kotlin dependencies with "Inconsistent JVM Target Compatibility". In your **root** `android/gradle.properties`:
+     ```properties
+     kotlin.jvm.target.validation.mode=warning
+     ```
 
 ## Usage
 
@@ -263,6 +309,7 @@ A custom hook that provides access to Truecaller functionality.
   - `androidConsentMode`: (optional) Controls how the consent UI is presented on Android. Accepted values: `'TRUECALLER_ANDROID_CONSENT_MODE_BOTTOMSHEET'` (default) or `'TRUECALLER_ANDROID_CONSENT_MODE_POPUP'`
   - `androidSdkOptions`: (optional) Controls which users can be verified on Android. Accepted values: `'TRUECALLER_ANDROID_SDK_OPTION_VERIFY_ONLY_TC_USERS'` (default) or `'TRUECALLER_ANDROID_SDK_OPTION_VERIFY_ALL_USERS'`
   - `androidDarkMode`: (optional, boolean) When `true`, forces dark mode on the consent UI. When `false`, forces light mode. Omit to follow the system theme.
+  - `androidEnhancedBottomSheet`: (optional, boolean) Toggle the v3.3.0 "enhanced bottom sheet" consent UI on Android (defaults to SDK default: enabled)
   - `androidSuccessHandler`: (optional) Callback function invoked on Android when Truecaller succeeds with a response. It receives a parameter of type `TruecallerAndroidResponse` containing the success data. Pass this function if you want to do server side validation of the Truecaller response.
   - `iosSuccessHandler`: (optional) Callback function invoked on iOS when Truecaller succeeds with a response. It receives a parameter of type `TruecallerIOSResponse` containing the raw profile (name, phone number, address, socials, avatar, and — when available — the `payload`/`signature`/`signatureAlgorithm`/`requestNonce` needed for server-side verification). Pass this function if you want to handle the raw iOS profile yourself instead of the normalized `userProfile`.
 
@@ -293,6 +340,7 @@ import {
 
 | Key                   | Value                                  | Description                                      |
 | --------------------- | -------------------------------------- | ------------------------------------------------ |
+| `READY`               | `'TruecallerAndroidReady'`             | Emitted when the Truecaller SDK is ready and initialized |
 | `ERROR`               | `'TruecallerAndroidError'`             | Emitted when an error occurs during verification |
 | `VERIFICATION_REQUIRED` | `'TruecallerAndroidVerificationRequired'` | Emitted when additional verification is needed |
 

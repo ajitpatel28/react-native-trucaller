@@ -1,7 +1,7 @@
 {
   "name": "@ajitpatel28/react-native-truecaller",
-  "version": "1.0.0",
-  "description": "Truecaller Integration with React Native for both Android[SDK v3.2.1] and IOS[TrueSDK v0.2.3]",
+  "version": "1.1.0",
+  "description": "Truecaller Integration with React Native for both Android[SDK v3.3.0] and IOS[TrueSDK v0.2.3]",
   "source": "./src/index.tsx",
   "main": "./lib/commonjs/index.js",
   "module": "./lib/module/index.js",
@@ -91,6 +91,7 @@
     "@release-it/conventional-changelog": "^5.0.0",
     "@types/jest": "^29.5.5",
     "@types/react": "^18.2.44",
+    "@types/react-test-renderer": "18.3.1",
     "commitlint": "^17.0.2",
     "del-cli": "^5.1.0",
     "eslint": "^8.51.0",
@@ -102,6 +103,7 @@
     "react": "18.3.1",
     "react-native": "0.75.2",
     "react-native-builder-bob": "^0.30.2",
+    "react-test-renderer": "18.3.1",
     "release-it": "^15.0.0",
     "turbo": "^1.10.7",
     "typescript": "^5.2.2"

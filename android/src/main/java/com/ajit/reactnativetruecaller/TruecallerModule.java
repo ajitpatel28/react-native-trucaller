@@ -90,13 +90,18 @@ public class TruecallerModule extends ReactContextBaseJavaModule implements Life
         public void onVerificationRequired(TcOAuthError oauthError) {
             emitEvent("TruecallerAndroidVerificationRequired", createErrorMap(oauthError.getErrorCode(), oauthError.getErrorMessage()));
         }
+
+        @Override
+        public void onSdkReady() {
+            emitEvent("TruecallerAndroidReady", null);
+        }
     };
 
     @ReactMethod
     public void initializeSdk(ReadableMap config) {
         try {
             isDarkMode = config.hasKey("darkMode") ? config.getBoolean("darkMode") : null;
-            TcSdk.init(buildSdkOptions(config));
+            TcSdk.initAsync(buildSdkOptions(config));
             if (config.hasKey("languageCode")) {
                 String languageCode = config.getString("languageCode");
                 if (languageCode != null && !languageCode.isEmpty()) {
@@ -186,6 +191,10 @@ public class TruecallerModule extends ReactContextBaseJavaModule implements Life
             sdkOptionsBuilder.sdkOptions(mapSdkOptions(config.getString("sdkOptions")));
         }
 
+
+        if (config.hasKey("enhancedBottomSheet")) {
+            sdkOptionsBuilder.setEnhancedBottomSheet(config.getBoolean("enhancedBottomSheet"));
+        }
 
         return sdkOptionsBuilder.build();
     }
